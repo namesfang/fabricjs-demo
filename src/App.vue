@@ -4,9 +4,11 @@
       <button @click="togglePencil" type="button" :class="{ light }">
         画笔
       </button>
+      <!--
       <button @click="toggleArrowPencil" type="button" :class="{ light: lightArrow }">
         箭头画笔
       </button>
+      -->
       <button @click="addText" type="button">文字</button>
     </div>
     <div class="workspace">
@@ -68,7 +70,11 @@ const options = reactive({
   fontBorderColor: '#ffffff',
   fontAutobreak: false,
   fontStyle: 'normal',
-  fontWeight: 'normal'
+  fontWeight: 'normal',
+  startArrow: false,
+  endArrow: false,
+  fillBackground: false,
+  fillBackgroundColor: '#a7d1ff'
 })
 
 const initPencil = ()=> {
@@ -120,7 +126,7 @@ const activeObject = (e, callback)=> {
   }
 }
 
-const _createArrowPath = (fromX, fromY, toX, toY, theta, headlen)=> {
+const _createArrowPath = (start, fromX, fromY, toX, toY, theta, headlen)=> {
   theta = typeof theta !== 'undefined' ? theta : 30
   headlen = typeof theta !== 'undefined' ? headlen : 10 
   // 计算各角度和对应的P2,P3坐标
@@ -133,12 +139,25 @@ const _createArrowPath = (fromX, fromY, toX, toY, theta, headlen)=> {
   let arrowX = fromX - topX,    arrowY = fromY - topY
   let path = ' M ' + fromX + ' ' + fromY
   path += ' L ' + toX + ' ' + toY
-  arrowX = toX + topX
-  arrowY = toY + topY
+
+  if(start) {
+    arrowX = toX - topX
+    arrowY = toY - topY
+  } else {
+    arrowX = toX + topX
+    arrowY = toY + topY
+  }
+  
   path += ' M ' + arrowX + ' ' + arrowY
   path += ' L ' + toX + ' ' + toY
-  arrowX = toX + botX
-  arrowY = toY + botY
+  if(start) {
+    arrowX = toX - botX
+    arrowY = toY - botY
+  } else {
+    arrowX = toX + botX
+    arrowY = toY + botY
+  }
+  
   path += ' L ' + arrowX + ' ' + arrowY
   return path
 }
@@ -609,6 +628,167 @@ watch(
     } else {
       canvas.freeDrawingBrush.shadow.offsetX = value
       canvas.freeDrawingBrush.shadow.offsetY = value
+    }
+  }
+)
+
+const createArrow = (start, cloned)=> {
+  let pos = start ? [0, 1] : [-2, -1]
+
+  let a = pos.shift();
+  let b = pos.shift();
+
+  let fromX = cloned.path.at(a).at(1);
+  let fromY = cloned.path.at(a).at(2);
+  let toX = cloned.path.at(b).at(1);
+  let toY = cloned.path.at(b).at(2);
+
+  return new fabric.Path(_createArrowPath(start, fromX, fromY, toX, toY, 20, 20), {
+    name: 'arrow',
+    fill: 'transparent',
+    stroke: options.color,
+    strokeWidth: options.width,
+    objectCaching: false,
+    // 禁止选中
+    selectable: false,
+    hasBorders: false, //当设置为 `false` 时，对象的控制边界不会被渲染
+    hasControls: false, // 当设置为 `false` 时，对象的控件不显示并且不能用于操作对象
+    hoverCursor: 'default',
+  })
+}
+
+const drawArrow = (add, start=true)=> {
+  let element = canvas.getActiveObject();
+  if(!element) {
+    return;
+  }
+
+  if(element.type == 'group') {
+    let elements = element.getObjects();
+    let length = elements.length;
+    let pencil = elements.find((t)=> t.name =='pencil')
+    if(add) {
+
+      let arrow = createArrow(start, pencil)
+
+      if(start) {
+        if(elements.at(0).type == 'arrow') {
+          return;
+        }
+      } else {
+        if(elements.at(-1).type == 'arrow') {
+          return;
+        }
+      }
+
+      start ? element.insertAt(arrow, 0) : element.addWithUpdate(arrow)
+
+      canvas.renderAll(element)
+    } else {
+      let index = start ? 0 : 2;
+      let el = element.item(index);
+
+      if(el.name == 'arrow') {
+        element.remove(el)
+        canvas.renderAll(element)
+      }
+
+      if(length === 2) {
+        canvas.add(pencil)
+        canvas.setActiveObject(pencil)
+        canvas.bringForward(pencil)
+        canvas.remove(element)
+      }
+    }
+    return;
+  }
+
+  element.clone((cloned)=> {
+
+    let arrow = createArrow(start, cloned)
+
+    cloned.name = 'pencil'
+    let elements = [
+      cloned,
+    ]
+
+    start ? elements.unshift(arrow) : elements.push(arrow)
+
+    let el = new fabric.Group(elements, {
+      top: element.top,
+      left: element.left
+    })
+
+    canvas.add(el)
+    canvas.setActiveObject(el)
+    canvas.bringForward(el)
+
+    canvas.remove(element)
+  })
+
+}
+
+// 开始箭头
+watch(
+  ()=> options.startArrow,
+  (value)=> {
+    drawArrow(value, true)
+  }
+)
+// 结束箭头
+watch(
+  ()=> options.endArrow,
+  (value)=> {
+    drawArrow(value, false)
+  }
+)
+
+watch(
+  ()=> options.fillBackground,
+  (value)=> {
+    let element = canvas.getActiveObject();
+    if(element) {
+      if(value) {
+        if(element.type =='group') {
+          let elements = element.getObjects()
+          for(let el of elements) {
+            if(el.name === 'pencil') {
+              el.set('fill', options.fillBackgroundColor)
+            }
+          }
+        } else {
+          element.set('fill', options.fillBackgroundColor)
+        }
+      } else {
+        if(element.type =='group') {
+          let elements = element.getObjects()
+          for(let el of elements) {
+            if(el.name === 'pencil') {
+              el.set('fill', null)
+            }
+          }
+        } else {
+          element.set('fill', null)
+        }
+      }
+      canvas.renderAll(element)
+    }
+  }
+)
+
+watch(
+  ()=> options.fillBackgroundColor,
+  (value)=> {
+    let element = canvas.getActiveObject();
+    if(element && options.fillBackground) {
+      if(element.type === 'group') {
+        let el = element.getObjects().find(t=> t.name === 'pencil')
+        el.set('fill', value)
+        canvas.renderAll(el)
+      } else {
+        element.set('fill', value)
+        canvas.renderAll(element)
+      }
     }
   }
 )

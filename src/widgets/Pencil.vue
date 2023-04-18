@@ -35,6 +35,30 @@
       <input type="range" v-model.number="options.shadowOffset" />
     </dd>
   </dl>
+  <dl>
+    <dt>开始箭头</dt>
+    <dd>
+      <input type="checkbox" v-model="options.startArrow" :true-value="true" :false-value="false" />
+    </dd>
+  </dl>
+  <dl>
+    <dt>结束箭头</dt>
+    <dd>
+      <input type="checkbox" v-model="options.endArrow" :true-value="true" :false-value="false" />
+    </dd>
+  </dl>
+  <dl>
+    <dt>添加背景</dt>
+    <dd>
+      <input type="checkbox" v-model="options.fillBackground" :true-value="true" :false-value="false" />
+    </dd>
+  </dl>
+  <dl v-if="options.fillBackground">
+    <dt>背景</dt>
+    <dd>
+      <input type="color" v-model="options.fillBackgroundColor">
+    </dd>
+  </dl>
 </template>
 
 <script setup>
